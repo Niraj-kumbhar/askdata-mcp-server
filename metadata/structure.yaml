@@ -1,0 +1,56 @@
+# ================================================================
+# <table_name>.yaml — Table Metadata Schema
+# ================================================================
+
+table: string
+description: string
+
+primary_key: [string]
+
+columns:
+  - name: string
+    type: string
+    nullable: boolean
+    description: string
+    example_value: string
+
+indexes:
+  - name: string
+    columns: [string]
+    unique: boolean
+    note: string
+
+foreign_keys:
+  - column: string
+    references:
+      table: string
+      column: string
+    note: string
+
+relationships:
+  - table: string
+    join_type: string
+    via: string
+    note: string
+
+row_count_approx: integer
+time_range: string
+
+notes:
+  business_rules: [string]
+  query_tips: [string]
+  common_joins:
+    - description: string
+      sql: string
+
+# ================================================================
+# sample_queries.yaml — Query Knowledge Base
+# ================================================================
+
+queries:
+  - id: string
+    question: string
+    tags:
+      tables: [string]
+      concepts: [string]
+    sql: string

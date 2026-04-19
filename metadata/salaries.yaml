@@ -1,0 +1,119 @@
+table: salaries
+description: >
+  Stores the complete salary history of every employee. Each row represents
+  a salary amount effective during a specific date range. This is by far the
+  largest table with ~2.8 million records. The current salary is identified
+  by to_date = '9999-01-01'. All salaries are stored as integers (whole numbers).
+  This table is critical for any compensation analysis, trending, or reporting.
+
+primary_key: [emp_no, from_date]
+
+columns:
+  - name: emp_no
+    type: INT
+    nullable: false
+    description: References employees.emp_no. Part of composite primary key.
+    example_value: "10001"
+
+  - name: salary
+    type: INT
+    nullable: false
+    description: >
+      Annual salary as an integer (no decimals). Values typically range
+      from ~38,000 to ~158,000 in the dataset.
+    example_value: "60117"
+
+  - name: from_date
+    type: DATE
+    nullable: false
+    description: The date from which this salary became effective. Part of composite PK.
+    example_value: "1986-06-26"
+
+  - name: to_date
+    type: DATE
+    nullable: false
+    description: >
+      The date the salary record ended. '9999-01-01' indicates this is the
+      current active salary. NOT NULL — unlike titles.to_date.
+    example_value: "9999-01-01"
+
+indexes:
+  - name: PRIMARY
+    columns: [emp_no, from_date]
+    unique: true
+    note: >
+      Two-column composite PK. Ensures each employee has at most one salary
+      change per date. Efficient for employee + date range queries.
+
+  - name: emp_no (KEY)
+    columns: [emp_no]
+    unique: false
+    note: Supports fast per-employee salary history retrieval.
+
+foreign_keys:
+  - column: emp_no
+    references:
+      table: employees
+      column: emp_no
+    note: ON DELETE CASCADE — deleting an employee removes all their salary records.
+
+relationships:
+  - table: employees
+    join_type: MANY-TO-ONE
+    via: emp_no
+    note: Each salary record belongs to one employee.
+
+row_count_approx: 2844047
+time_range: "from_date roughly 1985–2002; to_date up to 9999-01-01"
+
+notes:
+  business_rules:
+    - to_date is NOT NULL (unlike titles.to_date). Always use '9999-01-01' sentinel for current.
+    - salary is an INT — no currency precision; represents annual pay in USD.
+    - One employee averages ~9–10 salary records across their career.
+    - This is the largest table; avoid full table scans — always filter by emp_no or date.
+    - Salary history allows year-over-year compensation trend analysis.
+
+  query_tips:
+    - Current salary: WHERE to_date = '9999-01-01'.
+    - Salary at a specific date: WHERE from_date <= 'YYYY-MM-DD' AND to_date > 'YYYY-MM-DD'.
+    - For aggregate stats (avg, min, max), always filter to current salaries first unless
+      historical analysis is intended.
+    - This table has 2.8M rows — always use emp_no in WHERE for index usage.
+    - AVG(salary) across all rows will be inflated by duplicate historical records
+      unless filtered to to_date = '9999-01-01'.
+
+  common_joins:
+    - description: Get current salary for all employees with their name
+      sql: |
+        SELECT e.emp_no, e.first_name, e.last_name, s.salary
+        FROM employees e
+        JOIN salaries s ON e.emp_no = s.emp_no AND s.to_date = '9999-01-01'
+        ORDER BY s.salary DESC;
+
+    - description: Average current salary by department
+      sql: |
+        SELECT d.dept_name, ROUND(AVG(s.salary), 2) AS avg_salary
+        FROM salaries s
+        JOIN dept_emp de ON s.emp_no = de.emp_no
+          AND s.to_date = '9999-01-01'
+          AND de.to_date = '9999-01-01'
+        JOIN departments d ON de.dept_no = d.dept_no
+        GROUP BY d.dept_name
+        ORDER BY avg_salary DESC;
+
+    - description: Salary history for a specific employee
+      sql: |
+        SELECT salary, from_date, to_date
+        FROM salaries
+        WHERE emp_no = 10001
+        ORDER BY from_date;
+
+    - description: Top 10 highest paid current employees
+      sql: |
+        SELECT e.emp_no, CONCAT(e.first_name, ' ', e.last_name) AS full_name, s.salary
+        FROM salaries s
+        JOIN employees e ON s.emp_no = e.emp_no
+        WHERE s.to_date = '9999-01-01'
+        ORDER BY s.salary DESC
+        LIMIT 10;

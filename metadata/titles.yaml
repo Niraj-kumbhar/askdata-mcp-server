@@ -1,0 +1,104 @@
+table: titles
+description: >
+  Stores the job title history of each employee. One employee can hold multiple
+  titles over time (e.g., Engineer → Senior Engineer → Manager). A title record
+  is tied to an employee and a date range. Current title is identified by
+  to_date = '9999-01-01' or NULL. This is a temporal/history table — always
+  filter by date range for point-in-time analysis.
+
+primary_key: [emp_no, title, from_date]
+
+columns:
+  - name: emp_no
+    type: INT
+    nullable: false
+    description: References employees.emp_no. Part of composite primary key.
+    example_value: "10001"
+
+  - name: title
+    type: VARCHAR(50)
+    nullable: false
+    description: >
+      Job title held during the period. Known values include: Senior Engineer,
+      Staff, Engineer, Senior Staff, Assistant Engineer, Technique Leader, Manager.
+    example_value: "Senior Engineer"
+
+  - name: from_date
+    type: DATE
+    nullable: false
+    description: Date the employee started holding this title. Part of composite PK.
+    example_value: "1986-06-26"
+
+  - name: to_date
+    type: DATE
+    nullable: true
+    description: >
+      Date the title ended. NULL or '9999-01-01' means the employee currently
+      holds this title. This is the only nullable column in the table.
+    example_value: "9999-01-01"
+
+indexes:
+  - name: PRIMARY
+    columns: [emp_no, title, from_date]
+    unique: true
+    note: >
+      Three-column composite PK ensures uniqueness even if an employee holds
+      the same title in two different time periods.
+
+  - name: emp_no (KEY)
+    columns: [emp_no]
+    unique: false
+    note: Speeds up employee-specific title lookups.
+
+foreign_keys:
+  - column: emp_no
+    references:
+      table: employees
+      column: emp_no
+    note: ON DELETE CASCADE — deleting an employee removes all their title records.
+
+relationships:
+  - table: employees
+    join_type: MANY-TO-ONE
+    via: emp_no
+    note: Each title record belongs to one employee.
+
+row_count_approx: 443308
+time_range: "from_date roughly 1985–2000; to_date up to 9999-01-01"
+
+notes:
+  business_rules:
+    - to_date is nullable — treat both NULL and '9999-01-01' as "current title".
+    - The composite PK includes title text, so the same title can recur if an employee
+      left and re-earned it (from_date disambiguates).
+    - Known distinct titles (7): Senior Engineer, Staff, Engineer, Senior Staff, Assistant Engineer, Technique Leader, Manager.
+    - ON DELETE CASCADE ensures referential integrity when employees are removed.
+
+  query_tips:
+    - To get current titles: WHERE to_date = '9999-01-01' OR to_date IS NULL.
+    - The title column is not a FK to a titles reference table — it's a free VARCHAR. Add a GROUP BY title to enumerate distinct values.
+    - from_date is part of the PK — include it in queries for efficient index usage.
+    - For tenure duration: DATEDIFF(IFNULL(to_date, CURDATE()), from_date).
+
+  common_joins:
+    - description: Get current title for all employees
+      sql: |
+        SELECT e.emp_no, e.first_name, e.last_name, t.title
+        FROM employees e
+        JOIN titles t ON e.emp_no = t.emp_no
+        WHERE t.to_date = '9999-01-01' OR t.to_date IS NULL;
+
+    - description: Count employees by current title
+      sql: |
+        SELECT title, COUNT(*) AS employee_count
+        FROM titles
+        WHERE to_date = '9999-01-01' OR to_date IS NULL
+        GROUP BY title
+        ORDER BY employee_count DESC;
+
+    - description: Get full title progression history for an employee
+      sql: |
+        SELECT title, from_date, to_date
+        FROM titles
+        WHERE emp_no = 10001
+        ORDER BY from_date;

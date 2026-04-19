@@ -1,0 +1,78 @@
+table: departments
+description: >
+  Lookup/reference table for all company departments. Contains only 9 records.
+  Each department has a short code (dxxx format) and a unique name. This table
+  is the parent in relationships with dept_emp and dept_manager.
+
+primary_key: [dept_no]
+
+columns:
+  - name: dept_no
+    type: CHAR(4)
+    nullable: false
+    description: >
+      Department code in the format 'dxxx' (e.g., d001, d009).
+      Fixed-length 4-character string. Used as FK in dept_emp and dept_manager.
+    example_value: "d001"
+
+  - name: dept_name
+    type: VARCHAR(40)
+    nullable: false
+    description: Full human-readable department name. Has a UNIQUE constraint.
+    example_value: "Marketing"
+
+indexes:
+  - name: PRIMARY
+    columns: [dept_no]
+    unique: true
+    note: Primary key index.
+
+  - name: dept_name (UNIQUE KEY)
+    columns: [dept_name]
+    unique: true
+    note: Enforces that no two departments share the same name. Also speeds up name-based lookups.
+
+foreign_keys: []
+
+relationships:
+  - table: dept_emp
+    join_type: ONE-TO-MANY
+    via: dept_no
+    note: A department has many employees assigned over time.
+
+  - table: dept_manager
+    join_type: ONE-TO-MANY
+    via: dept_no
+    note: A department has had many managers over time.
+
+row_count_approx: 9
+time_range: "Static reference table — no date columns"
+
+notes:
+  business_rules:
+    - Only 9 departments exist: d001–d009.
+    - Known department names include Marketing, Finance, Human Resources, Production,
+      Development, Quality Management, Sales, Research, Customer Service.
+    - dept_no values are stable and can be safely hardcoded in queries.
+    - dept_name uniqueness is enforced at DB level via UNIQUE KEY.
+
+  query_tips:
+    - This table is tiny (9 rows) — safe to load fully into memory or cache in application code.
+    - Always join through dept_emp to find employees — no direct employee link here.
+    - For current department membership, always filter dept_emp.to_date = '9999-01-01'.
+
+  common_joins:
+    - description: List all departments with their current employee count
+      sql: |
+        SELECT d.dept_no, d.dept_name, COUNT(de.emp_no) AS employee_count
+        FROM departments d
+        JOIN dept_emp de ON d.dept_no = de.dept_no AND de.to_date = '9999-01-01'
+        GROUP BY d.dept_no, d.dept_name
+        ORDER BY employee_count DESC;
+
+    - description: List all departments with their current manager name
+      sql: |
+        SELECT d.dept_name, e.first_name, e.last_name
+        FROM departments d
+        JOIN dept_manager dm ON d.dept_no = dm.dept_no AND dm.to_date = '9999-01-01'
+        JOIN employees e ON dm.emp_no = e.emp_no;

@@ -1,0 +1,107 @@
+table: dept_manager
+description: >
+  Junction table recording which employee managed which department and during
+  what time period. Structurally identical to dept_emp. Each row represents
+  one management tenure. Current managers are identified by to_date = '9999-01-01'.
+  Only 24 records exist — one per distinct management period across all departments.
+
+primary_key: [emp_no, dept_no]
+
+columns:
+  - name: dept_no
+    type: CHAR(4)
+    nullable: false
+    description: References departments.dept_no. Part of composite primary key.
+    example_value: "d001"
+
+  - name: emp_no
+    type: INT
+    nullable: false
+    description: References employees.emp_no. The employee who served as manager.
+    example_value: "110022"
+
+  - name: from_date
+    type: DATE
+    nullable: false
+    description: Start date of the management tenure.
+    example_value: "1985-01-01"
+
+  - name: to_date
+    type: DATE
+    nullable: false
+    description: >
+      End date of management tenure. '9999-01-01' indicates the current manager.
+    example_value: "9999-01-01"
+
+indexes:
+  - name: PRIMARY
+    columns: [emp_no, dept_no]
+    unique: true
+    note: Composite PK. May not fully guarantee uniqueness for repeated tenures.
+
+  - name: emp_no (KEY)
+    columns: [emp_no]
+    unique: false
+    note: Supports employee-first manager lookups.
+
+  - name: dept_no (KEY)
+    columns: [dept_no]
+    unique: false
+    note: Supports department-first manager lookups.
+
+foreign_keys:
+  - column: emp_no
+    references:
+      table: employees
+      column: emp_no
+    note: ON DELETE CASCADE.
+
+  - column: dept_no
+    references:
+      table: departments
+      column: dept_no
+    note: ON DELETE CASCADE.
+
+relationships:
+  - table: employees
+    join_type: MANY-TO-ONE
+    via: emp_no
+    note: The managing employee.
+
+  - table: departments
+    join_type: MANY-TO-ONE
+    via: dept_no
+    note: The managed department.
+
+row_count_approx: 24
+time_range: "from_date / to_date roughly 1985–9999-01-01"
+
+notes:
+  business_rules:
+    - Only 9 departments exist; 24 records means most departments have had 2–3 managers.
+    - to_date = '9999-01-01' identifies the current manager of a department.
+    - A manager is also a regular employee — always join back to employees for their details.
+    - The same employee could theoretically manage multiple departments (data allows).
+
+  query_tips:
+    - Table is tiny (24 rows) — extremely fast even without index use.
+    - Always filter to_date = '9999-01-01' to get current managers.
+    - Join to employees to get manager name, and to departments for department name.
+
+  common_joins:
+    - description: Get current manager for every department
+      sql: |
+        SELECT d.dept_name, e.first_name, e.last_name, dm.from_date
+        FROM dept_manager dm
+        JOIN departments d ON dm.dept_no = d.dept_no
+        JOIN employees e ON dm.emp_no = e.emp_no
+        WHERE dm.to_date = '9999-01-01'
+        ORDER BY d.dept_name;
+
+    - description: Get full management history of a department
+      sql: |
+        SELECT e.first_name, e.last_name, dm.from_date, dm.to_date
+        FROM dept_manager dm
+        JOIN employees e ON dm.emp_no = e.emp_no
+        WHERE dm.dept_no = 'd005'
+        ORDER BY dm.from_date;

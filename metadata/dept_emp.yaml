@@ -1,0 +1,112 @@
+table: dept_emp
+description: >
+  Junction/bridge table resolving the many-to-many relationship between employees
+  and departments. Each row represents a period during which an employee was
+  assigned to a specific department. An employee can appear multiple times if they
+  transferred departments. The current assignment is identified by to_date = '9999-01-01'.
+
+primary_key: [emp_no, dept_no]
+
+columns:
+  - name: emp_no
+    type: INT
+    nullable: false
+    description: References employees.emp_no. Part of composite primary key.
+    example_value: "10001"
+
+  - name: dept_no
+    type: CHAR(4)
+    nullable: false
+    description: References departments.dept_no. Part of composite primary key.
+    example_value: "d005"
+
+  - name: from_date
+    type: DATE
+    nullable: false
+    description: The date the employee started in this department assignment.
+    example_value: "1986-06-26"
+
+  - name: to_date
+    type: DATE
+    nullable: false
+    description: >
+      The date the employee left this department. Use '9999-01-01' as a sentinel
+      value to indicate the current/active assignment. This is a critical filter
+      column in almost all dept_emp queries.
+    example_value: "9999-01-01"
+
+indexes:
+  - name: PRIMARY
+    columns: [emp_no, dept_no]
+    unique: true
+    note: >
+      Composite primary key. Note: this may NOT be fully unique if an employee
+      rejoined the same department — from_date would be needed for true uniqueness.
+
+  - name: emp_no (KEY)
+    columns: [emp_no]
+    unique: false
+    note: Non-unique index for fast employee-based lookups.
+
+  - name: dept_no (KEY)
+    columns: [dept_no]
+    unique: false
+    note: Non-unique index for fast department-based lookups.
+
+foreign_keys:
+  - column: emp_no
+    references:
+      table: employees
+      column: emp_no
+    note: ON DELETE CASCADE — deleting an employee removes all their dept_emp records.
+
+  - column: dept_no
+    references:
+      table: departments
+      column: dept_no
+    note: ON DELETE CASCADE — deleting a department removes all its dept_emp records.
+
+relationships:
+  - table: employees
+    join_type: MANY-TO-ONE
+    via: emp_no
+    note: Each dept_emp record belongs to one employee.
+
+  - table: departments
+    join_type: MANY-TO-ONE
+    via: dept_no
+    note: Each dept_emp record belongs to one department.
+
+row_count_approx: 331603
+time_range: "from_date / to_date range roughly 1985–9999-01-01 (sentinel)"
+
+notes:
+  business_rules:
+    - to_date = '9999-01-01' is the sentinel for "currently active" assignment.
+    - An employee can have multiple rows — one per department transfer.
+    - The composite PK (emp_no, dept_no) does not include from_date, so technically
+      a repeated assignment to the same department could cause a PK conflict.
+    - ON DELETE CASCADE means removing a parent employee or department cascades here automatically.
+    - An employee may concurrently belong to multiple departments (data allows this).
+
+  query_tips:
+    - ALWAYS filter to_date = '9999-01-01' to get current assignments only.
+    - This is the most-queried table — ensure dept_no and emp_no indexes are used.
+    - Use FROM dept_emp de JOIN employees e ON ... rather than the reverse for dept-first queries.
+    - Avoid SELECT * — the table has 331K+ rows; always project needed columns.
+
+  common_joins:
+    - description: Find all employees currently in a specific department
+      sql: |
+        SELECT e.emp_no, e.first_name, e.last_name
+        FROM dept_emp de
+        JOIN employees e ON de.emp_no = e.emp_no
+        WHERE de.dept_no = 'd005' AND de.to_date = '9999-01-01';
+
+    - description: Find department transfer history for an employee
+      sql: |
+        SELECT de.dept_no, d.dept_name, de.from_date, de.to_date
+        FROM dept_emp de
+        JOIN departments d ON de.dept_no = d.dept_no
+        WHERE de.emp_no = 10001
+        ORDER BY de.from_date;
